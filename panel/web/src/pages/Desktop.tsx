@@ -270,7 +270,9 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
   };
 
   // 中文 IME 输入修复：绕过 VNC XKB keysym 容量限制（~21 个 CJK 字符后 keymap 满，输入全废）。
-  // compositionend 时拿到最终文字，通过面板 API → xdotool 在容器内直接粘贴，完全不走 VNC keysym。
+  // 根因：KasmVNC 的 Perl 补丁在 compositionend 发 CJK keysym，但紧随其后的 _handleInput
+  // diff 逻辑会发 Backspace 清拼音，把刚发的字也删了。必须在捕获阶段拦截，阻止 Perl 补丁执行，
+  // 手动重置内部状态（防止 _handleInput 发 Backspace），然后通过 API 用 xdotool 粘贴文字。
   const patchVncIme = () => {
     try {
       const doc = frameRef.current?.contentDocument;
@@ -280,11 +282,21 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
       ta.addEventListener('compositionend', (e) => {
         const text = (e as CompositionEvent).data;
         if (!text || !id) return;
-        // 不 stopImmediatePropagation：让 KasmVNC 自己的 compositionend 也执行，
-        // 它需要重置内部状态（_imeInProgress/_imeHold），否则后续输入全部失效。
-        // 我们额外通过 API 把文字发到容器，双保险。
+        e.stopImmediatePropagation(); // 阻止 Perl 补丁发 keysym（会被后续 Backspace 删掉）
+        // 重置 KasmVNC 内部状态，防止 _handleInput 走 diff 分支发 Backspace
+        try {
+          const cv = doc.querySelector('canvas') as any;
+          const kb = cv?._rfb?.keyboard;
+          if (kb) {
+            kb._imeInProgress = false;
+            kb._imeHold = false;
+            kb._lastKeyboardInput = (e.target as HTMLTextAreaElement).value;
+            kb._rfbKeyQueue.length = 0;
+          }
+        } catch { /* ignore */ }
+        // 通过面板 API → xdotool 在容器内粘贴，完全绕过 VNC keysym
         api.typeInInstance(id, text).catch(() => {});
-      });
+      }, true); // capture：先于 Perl 补丁的 bubble handler
       const mark = doc.createElement('meta');
       mark.id = 'woc-ime-patch';
       (doc.head || doc.documentElement).appendChild(mark);
