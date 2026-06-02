@@ -280,11 +280,11 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
       ta.addEventListener('compositionend', (e) => {
         const text = (e as CompositionEvent).data;
         if (!text || !id) return;
-        // 阻止 KasmVNC 自己的 compositionend 处理（它会清 buffer 但不发文字）
-        e.stopImmediatePropagation();
-        e.preventDefault();
+        // 不 stopImmediatePropagation：让 KasmVNC 自己的 compositionend 也执行，
+        // 它需要重置内部状态（_imeInProgress/_imeHold），否则后续输入全部失效。
+        // 我们额外通过 API 把文字发到容器，双保险。
         api.typeInInstance(id, text).catch(() => {});
-      }, true); // capture phase：先于 KasmVNC 的 bubble handler 执行
+      });
       const mark = doc.createElement('meta');
       mark.id = 'woc-ime-patch';
       (doc.head || doc.documentElement).appendChild(mark);
