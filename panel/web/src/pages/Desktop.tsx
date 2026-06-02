@@ -54,6 +54,9 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
   const lastBeat = useRef(0);
 
   const inst = instances.find((i) => i.id === id);
+  // 进入实例时，共享列表可能尚未同步（管理页新建/安装后），先按"探测中"显示加载态，
+  // 等列表刷新到该实例或超时后再判定是否真的不存在，避免从管理页跳转时误报"实例不存在"。
+  const [probing, setProbing] = useState(true);
   const offline = inst ? inst.runtime !== 'running' : false;
   const installed = !!inst && inst.wechat.installed && inst.wechat.phase !== 'downloading';
   const showVnc = !!inst && !offline && installed;
@@ -65,7 +68,20 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
     setFiles([]);
     setShowClip(false);
     setClipText('');
+    setProbing(true);
   }, [id]);
+
+  // 探测态收敛：找到实例即结束；否则给共享列表一点刷新时间（AppShell 已在导航时拉取），超时仍无则判定不存在。
+  useEffect(() => {
+    if (inst) {
+      setProbing(false);
+      return;
+    }
+    if (!probing) return;
+    const t = window.setTimeout(() => setProbing(false), 2500);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inst, probing, id]);
 
   // 实例未就绪（启动中 / 安装中 / 上下文状态未刷新）时，每 3s 拉取最新状态：
   // 就绪后自动进入桌面，无需手动刷新（修复"安装完进度 100% 仍提示无实例"）。
@@ -403,7 +419,7 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
       </header>
 
       {/* —— 各种态 —— */}
-      {!loaded ? (
+      {!loaded || (probing && !inst) ? (
         <div className="iv-stage iv-center">
           <div className="spinner" />
         </div>

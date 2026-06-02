@@ -99,6 +99,12 @@ export default function AppShell() {
 
   useEffect(() => setDrawer(false), [loc.pathname]); // 路由变化关抽屉
 
+  // 路由切换时刷新共享实例列表：管理页用的是独立列表，新建/安装实例后不会动到这个共享 context，
+  // 否则进入实例页 / 回主页都读到陈旧列表（实例缺失），需手动刷新整页才出现。导航即拉一次最新即可。
+  // 不清空旧数据，拉取期间沿用旧列表，无闪烁。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => void state.reload(), [loc.pathname]);
+
   // 移动端不收成窄栏（改用抽屉）；折叠仅桌面生效
   const railed = collapsed && isDesktop;
 
