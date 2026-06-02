@@ -244,7 +244,9 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
       st.textContent =
         '#noVNC_control_bar_anchor{z-index:2147483647!important;}' +
         '#noVNC_control_bar{background:rgba(18,22,30,.96)!important;border:1px solid rgba(255,255,255,.55)!important;box-shadow:0 0 24px rgba(0,0,0,.55)!important;}' +
-        '#noVNC_control_bar_handle{opacity:1!important;background:rgba(18,22,30,.96)!important;border:1px solid rgba(255,255,255,.5)!important;}';
+        '#noVNC_control_bar_handle{opacity:1!important;background:rgba(18,22,30,.96)!important;border:1px solid rgba(255,255,255,.5)!important;}' +
+        // macOS 中文输入法需要目标元素有非零尺寸才能激活；KasmVNC 默认 0x0 导致无法切换输入法
+        '#noVNC_keyboardinput{width:1px!important;height:1px!important;opacity:0!important;overflow:hidden!important;}';
       (doc.head || doc.documentElement).appendChild(st);
     } catch {
       /* 同源正常不会到这 */
