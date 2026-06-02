@@ -253,6 +253,30 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
     }
   };
 
+  // 中文 IME 输入修复：绕过 VNC XKB keysym 容量限制（~21 个 CJK 字符后 keymap 满，输入全废）。
+  // compositionend 时拿到最终文字，通过面板 API → xdotool 在容器内直接粘贴，完全不走 VNC keysym。
+  const patchVncIme = () => {
+    try {
+      const doc = frameRef.current?.contentDocument;
+      if (!doc || doc.getElementById('woc-ime-patch')) return;
+      const ta = doc.getElementById('noVNC_keyboardinput') as HTMLTextAreaElement | null;
+      if (!ta) return;
+      ta.addEventListener('compositionend', (e) => {
+        const text = (e as CompositionEvent).data;
+        if (!text || !id) return;
+        // 阻止 KasmVNC 自己的 compositionend 处理（它会清 buffer 但不发文字）
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        api.typeInInstance(id, text).catch(() => {});
+      }, true); // capture phase：先于 KasmVNC 的 bubble handler 执行
+      const mark = doc.createElement('meta');
+      mark.id = 'woc-ime-patch';
+      (doc.head || doc.documentElement).appendChild(mark);
+    } catch {
+      /* ignore */
+    }
+  };
+
   // 跨设备剪贴板（文本）：通过同源 iframe 直接喂给 KasmVNC 自带的剪贴板 textarea 并触发其发送逻辑
   // （内部走 RFB.clipboardPasteFrom → clientCutText）。不依赖浏览器异步剪贴板 API，故 http/局域网 IP 下也可用，
   // 规避了"非安全上下文禁用 navigator.clipboard 导致粘贴失败"的问题。文本会进入容器系统剪贴板，
@@ -458,6 +482,7 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
               setTimeout(() => {
                 focusFrame(); // 加载完把键盘焦点交给 VNC（宿主机输入法）
                 injectVncStyle(); // 让原生控制条在深色背景下可见
+                patchVncIme(); // 修复中文 IME 吞字（绕过 VNC XKB keysym 限制）
               }, 500);
             }}
           />

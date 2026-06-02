@@ -328,6 +328,14 @@ export async function instanceLogs(inst: Instance, tail = 600): Promise<string> 
   return out || buf.toString('utf8'); // 兜底：TTY 模式非多路复用
 }
 
+// 通过 xdotool 在实例容器内输入文字（绕过 VNC keysym 限制，解决中文 IME 吞字问题）。
+// 用 base64 传递文本避免 shell 转义问题，xclip 写入剪贴板后 xdotool 模拟 Ctrl+V 粘贴。
+export async function typeInInstance(inst: Instance, text: string): Promise<void> {
+  const b64 = Buffer.from(text, 'utf8').toString('base64');
+  const cmd = `echo '${b64}' | base64 -d | xclip -selection clipboard -i && xdotool key ctrl+v`;
+  await execCapture(inst, ['bash', '-c', cmd]);
+}
+
 // 实例容器名（供反代构造 target）。
 export function instanceTarget(inst: Instance): string {
   return `http://${inst.containerName}:3000`;
