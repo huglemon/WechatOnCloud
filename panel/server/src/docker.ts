@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import Docker from 'dockerode';
 import type { Instance } from './store.js';
 
-const WECHAT_IMAGE = process.env.WOC_WECHAT_IMAGE || 'ghcr.io/gloridust/wechat-on-cloud:latest';
+const WECHAT_IMAGE = process.env.WOC_WECHAT_IMAGE || 'ghcr.io/huglemon/wechat-on-cloud:latest';
 const PUID = process.env.PUID || '1000';
 const PGID = process.env.PGID || '1000';
 const TZ = process.env.TZ || 'Asia/Shanghai';
