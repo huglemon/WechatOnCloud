@@ -1641,6 +1641,12 @@ button {
   .ws-action {
     padding: 7px 12px;
   }
+  .ws-page.soft-keyboard-open {
+    height: calc(100% - var(--woc-keyboard-inset, 0px));
+  }
+  .ws-page.soft-keyboard-open .iv-files {
+    max-height: calc(100% - 28px);
+  }
 }
 
 /* 宽屏：工作区内容容器更宽（实例网格多列） */

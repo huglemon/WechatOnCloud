@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useUI } from '../ui';
@@ -53,6 +53,9 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
   const dragDepth = useRef(0);
   const lastBeat = useRef(0);
   const lastImeError = useRef(0);
+  const viewportBaseHeight = useRef(0);
+  const viewportWidth = useRef(0);
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   const inst = instances.find((i) => i.id === id);
   // 进入实例时，共享列表可能尚未同步（管理页新建/安装后），先按"探测中"显示加载态，
@@ -61,6 +64,7 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
   const offline = inst ? inst.runtime !== 'running' : false;
   const installed = !!inst && inst.wechat.installed && inst.wechat.phase !== 'downloading';
   const showVnc = !!inst && !offline && installed;
+  const pageStyle = keyboardInset > 0 ? ({ '--woc-keyboard-inset': `${keyboardInset}px` } as CSSProperties) : undefined;
 
   // 切换实例时重置内嵌态
   useEffect(() => {
@@ -185,6 +189,66 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
       }
     };
   }, [showVnc, id, frameLoaded]);
+
+  // 移动端软键盘通常覆盖 visual viewport，而不是重新布局页面；这里计算底部被键盘
+  // 占掉的高度，并让 VNC 画面主动缩到键盘上方，避免微信输入框被键盘盖住。
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const updateKeyboardInset = () => {
+      const mobileLike = window.matchMedia('(max-width: 767px), (pointer: coarse)').matches;
+      if (!mobileLike || !vv) {
+        viewportBaseHeight.current = 0;
+        viewportWidth.current = 0;
+        setKeyboardInset(0);
+        return;
+      }
+
+      const width = Math.round(vv.width || window.innerWidth);
+      const layoutHeight = Math.max(
+        document.documentElement.clientHeight,
+        window.innerHeight,
+        vv.height + vv.offsetTop,
+      );
+      if (!viewportBaseHeight.current || Math.abs(width - viewportWidth.current) > 40) {
+        viewportBaseHeight.current = layoutHeight;
+        viewportWidth.current = width;
+      }
+
+      viewportBaseHeight.current = Math.max(viewportBaseHeight.current, layoutHeight);
+      const obscured = Math.round(viewportBaseHeight.current - vv.height - vv.offsetTop);
+      const nextInset = obscured >= 120 ? obscured : 0;
+      setKeyboardInset((prev) => (prev === nextInset ? prev : nextInset));
+    };
+
+    const resetKeyboardBase = () => {
+      viewportBaseHeight.current = 0;
+      window.setTimeout(updateKeyboardInset, 80);
+    };
+
+    updateKeyboardInset();
+    vv?.addEventListener('resize', updateKeyboardInset);
+    vv?.addEventListener('scroll', updateKeyboardInset);
+    window.addEventListener('resize', updateKeyboardInset);
+    window.addEventListener('orientationchange', resetKeyboardBase);
+    return () => {
+      vv?.removeEventListener('resize', updateKeyboardInset);
+      vv?.removeEventListener('scroll', updateKeyboardInset);
+      window.removeEventListener('resize', updateKeyboardInset);
+      window.removeEventListener('orientationchange', resetKeyboardBase);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showVnc || !frameLoaded) return;
+    const t = window.setTimeout(() => {
+      try {
+        frameRef.current?.contentWindow?.dispatchEvent(new Event('resize'));
+      } catch {
+        /* ignore */
+      }
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [keyboardInset, showVnc, frameLoaded]);
 
   if (!id) {
     nav('/', { replace: true });
@@ -447,7 +511,7 @@ export default function InstanceView({ onOpenMenu }: { onOpenMenu: () => void })
   const title = inst?.name || '微信实例';
 
   return (
-    <div className="ws-page">
+    <div className={'ws-page' + (keyboardInset > 0 ? ' soft-keyboard-open' : '')} style={pageStyle}>
       <header className="ws-head">
         <button className="ws-menu" onClick={onOpenMenu} aria-label="菜单">
           {MenuIcon}
